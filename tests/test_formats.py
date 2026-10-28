@@ -28,6 +28,11 @@ def test_prefers_combined_mp4_and_accepts_unknown_codec_metadata():
     assert video['format_id'] == 'progressive'
 
 
+def test_accepts_m4a_with_unknown_codec_metadata():
+    video, audio = worker.select_formats({'formats': [fmt(), fmt(ext='m4a', vcodec=None, acodec=None)]})
+    assert audio is not None and audio['ext'] == 'm4a'
+
+
 @pytest.fixture
 def streams(tmp_path):
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):

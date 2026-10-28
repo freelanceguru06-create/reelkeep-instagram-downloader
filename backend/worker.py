@@ -127,7 +127,10 @@ def select_formats(info):
     formats = [f for f in info.get('formats', []) if f.get('protocol') == 'https' and f.get('url') and not f.get('has_drm')]
     combined = [f for f in formats if f.get('ext') == 'mp4' and f.get('vcodec') != 'none' and f.get('acodec') != 'none']
     videos = [f for f in formats if f.get('ext') == 'mp4' and f.get('vcodec') not in ('none', None) and f.get('acodec') == 'none']
-    audios = [f for f in formats if f.get('ext') in ('m4a', 'mp4') and f.get('vcodec') == 'none' and f.get('acodec') not in ('none', None)]
+    # M4A URLs can omit codec metadata, just like progressive MP4 URLs. Verify bytes
+    # and the final audio stream instead of requiring optional metadata to be present.
+    audios = [f for f in formats if f.get('ext') in ('m4a', 'mp4') and f.get('vcodec') in ('none', None)
+              and f.get('acodec') != 'none' and (f.get('ext') == 'm4a' or f.get('vcodec') == 'none')]
     if combined:
         chosen = max(combined, key=lambda f: (f.get('height') or 0, f.get('tbr') or 0))
     elif videos:
