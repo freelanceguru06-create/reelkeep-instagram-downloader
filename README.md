@@ -2,7 +2,7 @@
 
 Lightweight Instagram public Reel/video-post downloader experiment. Astro static frontend; FastAPI backend; yt-dlp anonymous metadata extraction; bounded HTTPS CDN download; FFprobe verification; temporary files. No paid API, passwords, cookies, private-account support, proxy rotation or access-control bypass.
 
-Local downloads were verified for three authorized Reels on 28 October 2026. Two representative Reels also downloaded and passed FFprobe inspection through the deployed Render Free backend at https://reelkeep-instagram-downloader.onrender.com. **The Cloudflare Pages frontend still requires account sign-in and deployment.** See the local verification report if included with your copy; local browser results do not establish pages.dev end-to-end success.
+Live frontend: **https://reelkeep-dkg.pages.dev**. Backend: **https://reelkeep-instagram-downloader.onrender.com**. Both use free hosting; no custom domain or paid API. Local downloads were verified for three authorized Reels on 28 October 2026, and two representative Reels passed cloud download and FFprobe inspection. See the delivered verification report for the production browser results and remaining device/format limitations.
 
 ## Requirements
 
@@ -50,6 +50,8 @@ The probe inspects actual downloaded media and deletes its temporary copy. Do no
 ## Configuration and deployment
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) and [API.md](API.md). Backend `ALLOWED_ORIGINS` is a comma-separated list of exact frontend origins. Frontend `PUBLIC_API_BASE` is a public HTTPS backend origin, not a secret. `SITE_URL` is the actual HTTPS pages.dev origin. Without `SITE_URL`, the build stays noindex and omits canonical/sitemap. Without `PUBLIC_API_BASE`, production shows backend unavailable instead of using a fabricated endpoint.
+
+The deployed backend permits `https://reelkeep-dkg.pages.dev`. To reproduce the production static build in PowerShell, set `PUBLIC_API_BASE` to `https://reelkeep-instagram-downloader.onrender.com` and `SITE_URL` to `https://reelkeep-dkg.pages.dev` before `pnpm build`. Use a local backend for local development; the hosted API intentionally restricts browser origins to the production site.
 
 The static artifact is `dist/`; it never contains videos. Cloudflare Pages does not execute the Python backend. A Worker port of this native subprocess design is unsupported.
 

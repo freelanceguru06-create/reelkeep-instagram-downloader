@@ -18,7 +18,7 @@ Use an authorized GitHub account. Source needed by Render: `Dockerfile`, `requir
 
 Free limits checked 28 October 2026: 750 running hours/workspace/calendar month, idle sleep after 15 minutes, startup about a minute, ephemeral filesystem and no free persistent disk. Hobby includes 5GB outbound bandwidth/month; payment-method accounts may be billed overage, while accounts without one are suspended at exhaustion. Render can suspend unusually high outbound service traffic. The account dashboard confirmed 500 included pipeline minutes, a $0 build-spend limit, no card on file, and a selectable Free instance with 0.1 CPU and 512MB RAM. The free Postgres 30-day offer is excluded.
 
-The backend has been deployed at https://reelkeep-instagram-downloader.onrender.com. Two authorized Reel downloads passed cloud verification. Its current CORS allowlist contains `http://127.0.0.1:4321` for the verified local production preview. Add the actual Pages origin before using the hosted frontend. Cloudflare Pages remains undeployed pending account sign-in; the steps below are still required.
+The backend is deployed at https://reelkeep-instagram-downloader.onrender.com. The Pages frontend is deployed at https://reelkeep-dkg.pages.dev. Render `ALLOWED_ORIGINS` is now exactly `https://reelkeep-dkg.pages.dev`; the production-origin preflight returned HTTP 200 with that exact allow-origin header. No local origin is permitted on the hosted backend. The steps below describe how to reproduce or update the deployment.
 
 ## 3. Cloudflare Pages
 
@@ -41,6 +41,16 @@ pnpm exec wrangler pages deploy dist --project-name YOUR-REAL-PROJECT --branch m
 ```
 
 These uppercase values are placeholders, never reported as deployments. Alternatively, Pages Dashboard → Create application → Pages → Direct Upload, and upload the contents of `dist/`. Build the frontend with your actual backend origin first. Use only the generated pages.dev address.
+
+For this deployment, the Cloudflare project name is `reelkeep` and Cloudflare assigned `https://reelkeep-dkg.pages.dev` as its permanent hostname. The production build commands were:
+
+```powershell
+$env:PUBLIC_API_BASE = 'https://reelkeep-instagram-downloader.onrender.com'
+$env:SITE_URL = 'https://reelkeep-dkg.pages.dev'
+pnpm build
+```
+
+The build ZIP was uploaded through the authenticated Pages dashboard; all ten assets uploaded successfully before Deploy site. Browser sign-in does not authenticate Wrangler automatically. Future CLI uploads still require a separate `wrangler login`, or use the same Direct Upload dashboard.
 
 For Git integration: framework Astro, build `pnpm build`, output `dist`, Node 24, with the same two public environment values and pnpm 11. The lockfile and build-script allowlist are included. Do not mix Direct Upload and Git integration assumptions; Cloudflare documents that switching project types may require a new project.
 
