@@ -101,11 +101,13 @@ def test_rate_and_busy_limits():
         app.state.store.busy = True
         assert client.post('/api/download', json={'url': VALID}).status_code == 503
         app.state.store.busy = False
-        for _ in range(4):
+        assert not app.state.store.global_calls
+        for _ in range(5):
             assert client.post('/api/download', json={'url': VALID}).status_code == 502
         response = client.post('/api/download', json={'url': VALID})
         assert response.status_code == 429
-        assert response.headers['retry-after'] == '3600'
+        assert 3590 <= int(response.headers['retry-after']) <= 3600
+        assert response.json()['error']['retry_after_seconds'] == int(response.headers['retry-after'])
 
 
 def test_media_contract_ranges_expiry_and_cleanup():

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import secrets
@@ -34,12 +35,13 @@ class Entry:
 
 
 class State:
-    def __init__(self):
+    def __init__(self, client_limit=5):
         self.directory = Path(tempfile.mkdtemp(prefix='reelkeep-'))
         self.entries = {}
         self.busy = False
         self.clients = defaultdict(deque)
         self.global_calls = deque()
+        self.client_limit = client_limit
         self.day = int(time.time() // 86400)
         self.delivered = 0
 
@@ -55,17 +57,45 @@ class State:
             if not calls:
                 del self.clients[key]
 
-    def limit(self, client):
+    def admit(self, client):
+        """Charge only jobs that can start. A shared proxy is not a visitor identity."""
         self.prune()
+        if self.busy:
+            raise Problem('BUSY', 'Another video is processing. Try again shortly.', 503)
         now = time.monotonic()
-        key = hashlib.sha256(client.encode()).hexdigest()
-        calls = self.clients[key]
+        calls = None
+        if self.client_limit:
+            key = hashlib.sha256(client.encode()).hexdigest()
+            if key not in self.clients and len(self.clients) >= 1000:
+                raise Problem('BUSY', 'The service is busy. Try again shortly.', 503)
+            calls = self.clients[key]
         while self.global_calls and self.global_calls[0] < now - 3600:
             self.global_calls.popleft()
-        if len(calls) >= 5 or len(self.global_calls) >= 20 or len(self.clients) > 1000:
-            raise Problem('RATE_LIMITED', 'The prototype request limit is reached. Try again in an hour.', 429)
-        calls.append(now)
+        waits = []
+        if calls is not None and len(calls) >= self.client_limit:
+            waits.append(calls[0] + 3600 - now)
+        if len(self.global_calls) >= 20:
+            waits.append(self.global_calls[0] + 3600 - now)
+        if waits:
+            seconds = max(1, math.ceil(max(waits)))
+            minutes = max(1, math.ceil(seconds / 60))
+            scope = 'The site has' if len(self.global_calls) >= 20 else 'Your connection has'
+            raise Problem('RATE_LIMITED', f'{scope} reached its hourly processing limit. Try again in about {minutes} minute(s).', 429, retry_after=seconds)
+        if len(self.entries) >= 2:
+            inactive = [(token, entry) for token, entry in self.entries.items() if not entry.readers]
+            if not inactive:
+                raise Problem('STORAGE_FULL', 'Both video files are in use. Try again after the downloads finish.', 503)
+            # Keep disk use bounded while allowing a third video without a ten-minute lockout.
+            token, entry = min(inactive, key=lambda item: item[1].expires)
+            try:
+                entry.path.unlink(missing_ok=True)
+            except OSError:
+                raise Problem('STORAGE_FULL', 'Temporary storage is busy. Try again shortly.', 503)
+            del self.entries[token]
+        if calls is not None:
+            calls.append(now)
         self.global_calls.append(now)
+        self.busy = True
 
 
 async def isolated_extract(url, target):
@@ -90,8 +120,12 @@ async def isolated_extract(url, target):
     return payload['media']
 
 
-def create_app(extractor=isolated_extract):
-    state = State()
+def create_app(extractor=isolated_extract, *, client_limit=None):
+    # Render's connection peer is its proxy. Do not give all visitors a shared five-job bucket
+    # or trust caller-supplied forwarding headers. The site-wide twenty-job cap still applies.
+    if client_limit is None:
+        client_limit = 0 if os.environ.get('RENDER') == 'true' else 5
+    state = State(client_limit=client_limit)
 
     async def janitor():
         while True:
@@ -114,8 +148,12 @@ def create_app(extractor=isolated_extract):
 
     @api.exception_handler(Problem)
     async def problem_handler(request, error):
-        headers = {'Retry-After': '3600'} if error.status == 429 else {}
-        return JSONResponse({'ok': False, 'error': {'code': error.code, 'message': error.message}}, status_code=error.status, headers=headers)
+        detail = {'code': error.code, 'message': error.message}
+        headers = {}
+        if error.retry_after is not None:
+            detail['retry_after_seconds'] = error.retry_after
+            headers['Retry-After'] = str(error.retry_after)
+        return JSONResponse({'ok': False, 'error': detail}, status_code=error.status, headers=headers)
 
     @api.middleware('http')
     async def headers(request, call_next):
@@ -150,14 +188,9 @@ def create_app(extractor=isolated_extract):
         if not isinstance(payload, dict) or set(payload) != {'url'} or not isinstance(payload['url'], str):
             raise Problem('INVALID_REQUEST', 'Send one string field named url.', 422)
         url = normalize_url(payload['url'])
-        state.limit(request.client.host if request.client else 'unknown')
-        if state.busy:
-            raise Problem('BUSY', 'Another video is processing. Try again shortly.', 503)
-        if len(state.entries) >= 2:
-            raise Problem('STORAGE_FULL', 'Temporary storage is full. Try again after existing videos expire.', 503)
         token = secrets.token_urlsafe(32)
         target = state.directory / f'{token}.mp4'
-        state.busy = True
+        state.admit(request.client.host if request.client else 'unknown')
         started = time.monotonic()
         try:
             media = await extractor(url, target)

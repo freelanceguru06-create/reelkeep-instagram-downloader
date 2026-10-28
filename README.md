@@ -59,9 +59,9 @@ The static artifact is `dist/`; it never contains videos. Cloudflare Pages does 
 
 - Allowlisted Instagram URL formats and CDN hosts; destination DNS must resolve only to global addresses. CDN connection pins the checked address while verifying the original TLS hostname, and revalidates redirects.
 - No shell commands constructed from URLs. Extraction runs in an isolated child process with a 55-second deadline.
-- 2KiB JSON request limit; 50MiB/file; one active extraction; two stored videos; ten-minute expiry with periodic cleanup.
-- Five extraction attempts/client/hour, twenty globally/hour. 100MiB conservative delivery allowance per process per UTC day, including previews/ranges. No distributed database or durable quota.
-- All state resets on process restart. Use exactly one Uvicorn worker. On a host reverse proxy, untrusted proxy headers are ignored, so visitors can share a conservative client quota.
+- 2KiB JSON request limit; 50MiB/file; one active extraction; two stored videos; expiry after at most ten minutes. A new job replaces the oldest inactive file when storage is full; active transfers are protected.
+- Twenty admitted processing attempts/hour shared across the hosted site. Busy, invalid and storage-blocked requests do not consume that quota; an admitted extraction that the source rejects does. Errors report the actual remaining wait. A separate five-attempt client limit applies only outside Render, where the direct peer can identify a connection.
+- 100MiB conservative delivery allowance per process per UTC day, including previews/ranges. No distributed database or durable quota. All state resets on process restart. Use exactly one Uvicorn worker. Proxy headers remain untrusted; Render's shared connection peer is deliberately not used as a visitor identity.
 - Random temporary URLs are bearer capabilities, not user accounts. No URL history, analytics or application access logs. Infrastructure providers can still retain network metadata.
 - Free backend sleep/restarts may delete pending videos. In-flight transfers hold a reader reference so cleanup waits.
 - These application limits do not establish a provider billing cap. Deploy only on Free, with no payment method/paid upgrades for this experiment. Monitor host usage. A heavily used public downloader is unsuitable for these tiers.
