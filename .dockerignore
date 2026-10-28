@@ -1,0 +1,4 @@
+*
+!backend/
+!backend/*.py
+!requirements.txt

@@ -1,0 +1,29 @@
+---
+import '../styles/global.css';
+const {title = 'Reelkeep — Instagram video downloader', description = 'Save a public Instagram Reel or video post you have permission to download. No account connection. Clear results when a video is unavailable.'} = Astro.props;
+const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="robots" content={canonical ? 'index,follow' : 'noindex,nofollow'} />
+    {canonical && <link rel="canonical" href={canonical} />}
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    {canonical && <meta property="og:url" content={canonical} />}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class="shell">
+      <header class="header"><a class="brand" href="/" aria-label="Reelkeep home"><span class="brand-icon" aria-hidden="true">↧</span> reelkeep<span class="brand-dot">.</span></a><nav aria-label="Main"><a href="/#how-it-works">How it works</a><a href="/#faq">FAQ</a><span class="nav-tag">PUBLIC VIDEOS ONLY</span></nav></header>
+      <main id="main"><slot /></main>
+      <footer><a class="brand small" href="/">reelkeep.</a><p>A little space for videos worth keeping.</p><div><a href="/privacy/">Privacy</a><a href="/acceptable-use/">Acceptable use</a></div><p class="fine">Independent tool. Not affiliated with Instagram or Meta.</p></footer>
+    </div>
+  </body>
+</html>

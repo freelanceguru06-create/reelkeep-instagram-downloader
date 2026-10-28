@@ -1,0 +1,37 @@
+---
+import Layout from '../layouts/Layout.astro';
+const apiBase = import.meta.env.PUBLIC_API_BASE || (import.meta.env.DEV ? 'http://127.0.0.1:8000' : '');
+if (apiBase) {
+  const parsed = new URL(apiBase);
+  if ((!import.meta.env.DEV && parsed.protocol !== 'https:') || parsed.pathname !== '/' || parsed.username || parsed.password || parsed.search || parsed.hash) throw new Error('PUBLIC_API_BASE must be an HTTPS origin.');
+}
+---
+<Layout>
+  <section class="hero">
+    <div class="eyebrow"><span></span> YOUR FINDS. YOUR LITTLE COLLECTION.</div>
+    <h1>Some videos<br />are <em>keepers.</em></h1>
+    <p class="intro">Save a public Instagram Reel or video post.<br class="desktop" /> Keep the inspiration, one link at a time.</p>
+    <section class="download-card" aria-label="Instagram video downloader" data-api-base={apiBase}>
+      <form id="download-form" novalidate>
+        <label for="instagram-url">PASTE YOUR INSTAGRAM LINK</label>
+        <div class="input-row"><span class="link-icon" aria-hidden="true">↗</span><input id="instagram-url" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="1024" placeholder="https://www.instagram.com/reel/…" aria-describedby="url-help status" required /><button id="paste" class="paste" type="button">Paste</button></div>
+        <button id="submit" class="primary" type="submit"><span>Find my video</span><span aria-hidden="true">↧</span></button>
+        <p id="url-help" class="helper">Public Reels & video posts · Up to 50 MiB · No login</p>
+      </form>
+      <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+      <section id="result" class="result" aria-label="Your video" hidden>
+        <div class="result-top"><span class="ready">✓ VERIFIED MP4</span><span id="media-size"></span></div>
+        <video id="preview" controls playsinline preload="none" aria-label="Extracted video preview"></video>
+        <h2 id="video-title"></h2><p id="video-details"></p>
+        <button id="save" class="primary" type="button"><span>Download video</span><span aria-hidden="true">↓</span></button>
+        <p class="helper">Available for 10 minutes. Preview and download share a limited allowance.</p>
+      </section>
+      <noscript><p class="status">Enable JavaScript to validate links and request a video.</p></noscript>
+    </section>
+    <p class="permission">Only save content you own or have permission to download.<br />Some public videos may still be unavailable.</p>
+    <div class="hero-notes"><span><i aria-hidden="true">◇</i> No account connection</span><span><i aria-hidden="true">◷</i> Temporary files</span><span><i aria-hidden="true">↙</i> Straight to your device</span></div>
+  </section>
+  <section class="how" id="how-it-works"><div class="section-head"><p class="eyebrow">THREE SMALL STEPS</p><h2>From found to saved.</h2></div><div class="steps"><article><span class="step-number">01</span><h3>Find your keeper</h3><p>Open a public Reel or video post in Instagram. Use Share to copy its link.</p></article><article><span class="step-number">02</span><h3>Drop the link</h3><p>Paste it above. We’ll check whether the video is accessible without signing in.</p></article><article><span class="step-number">03</span><h3>Make it yours to keep</h3><p>If a verified MP4 is available, preview it and download it to your device.</p></article></div></section>
+  <section class="faq" id="faq"><div class="section-head"><p class="eyebrow">A FEW GOOD QUESTIONS</p><h2>Before you save.</h2></div><div class="questions"><details><summary>Which links can I use?</summary><p>Links to one public Instagram Reel or video post: /reel/, /reels/, /p/ or /tv/. Profiles, stories, photos, carousel posts and private content are unsupported.</p></details><details><summary>Why might a public video fail?</summary><p>Instagram may require login, restrict server access or rate-limit requests. A post may also be deleted, unavailable in your region or unsupported by the extractor. We show the available error evidence and never request your Instagram password.</p></details><details><summary>Where do my videos go?</summary><p>Successful downloads are temporarily held by the backend for about ten minutes. They are removed automatically, and may disappear sooner if the free backend restarts. The file you download stays on your device.</p></details><details><summary>Is there a download limit?</summary><p>This is a small free-hosting prototype: up to 50 MiB per video, one extraction at a time, five attempts per client per hour and twenty globally. Preview and download have a shared delivery cap. A sleeping backend can take about a minute to wake.</p></details></div></section>
+  <script src="../scripts/downloader.ts"></script>
+</Layout>

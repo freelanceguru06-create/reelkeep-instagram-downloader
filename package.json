@@ -1,0 +1,28 @@
+{
+  "name": "reelkeep",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1",
+    "build": "astro check && astro build && node scripts/finalize.mjs",
+    "preview": "astro preview --host 127.0.0.1",
+    "test": "node --test tests/frontend.test.mjs",
+    "test:browser": "playwright test",
+    "cf:whoami": "wrangler whoami",
+    "deploy:pages": "wrangler pages deploy dist --project-name reelkeep --branch main"
+  },
+  "dependencies": {
+    "astro": "7.4.2"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "@playwright/test": "1.64.1",
+    "typescript": "6.0.3",
+    "wrangler": "4.153.0"
+  },
+  "packageManager": "pnpm@11.25.0"
+}

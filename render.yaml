@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: reelkeep-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ALLOWED_ORIGINS
+        sync: false
