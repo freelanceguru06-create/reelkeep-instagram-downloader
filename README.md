@@ -1,6 +1,6 @@
 # Reelkeep
 
-Lightweight Instagram public Reel/video-post downloader experiment. Astro static frontend; FastAPI backend; yt-dlp anonymous metadata extraction; bounded HTTPS CDN download; FFprobe verification; temporary files. No paid API, passwords, cookies, private-account support, proxy rotation or access-control bypass.
+Lightweight Instagram public Reel/video-post downloader experiment. Astro static frontend; FastAPI backend; yt-dlp anonymous metadata extraction; bounded HTTPS CDN downloads; optional local FFmpeg stream-copy merging of direct video/audio files; FFprobe verification; temporary files. No paid API, passwords, cookies, private-account support, proxy rotation or access-control bypass.
 
 Live frontend: **https://reelkeep-dkg.pages.dev**. Backend: **https://reelkeep-instagram-downloader.onrender.com**. Both use free hosting; no custom domain or paid API. Local downloads were verified for three authorized Reels on 28 October 2026, and two representative Reels passed cloud download and FFprobe inspection. See the delivered verification report for the production browser results and remaining device/format limitations.
 
@@ -58,7 +58,8 @@ The static artifact is `dist/`; it never contains videos. Cloudflare Pages does 
 ## Resource and security boundaries
 
 - Allowlisted Instagram URL formats and CDN hosts; destination DNS must resolve only to global addresses. CDN connection pins the checked address while verifying the original TLS hostname, and revalidates redirects.
-- No shell commands constructed from URLs. Extraction runs in an isolated child process with a 55-second deadline.
+- No shell commands constructed from URLs. Extraction runs in an isolated child process with a 55-second hard deadline and a shared 50-second processing budget. FFmpeg sees only already downloaded local files and a file/pipe protocol allowlist; it never receives a remote URL. Cancellation terminates the worker process tree and removes temporary stream files.
+- Combined MP4 is preferred. Otherwise direct MP4 video plus M4A audio can be stream-copied into MP4; split-stream selection prefers AVC and resolutions up to 1080p when offered. Aggregate stream inputs reserve 1MiB below the 50MiB output cap for container overhead. No transcoding, manifests or DRM support. Genuine source video without audio is explicitly labeled; known source audio is not silently discarded.
 - 2KiB JSON request limit; 50MiB/file; one active extraction; two stored videos; expiry after at most ten minutes. A new job replaces the oldest inactive file when storage is full; active transfers are protected.
 - Twenty admitted processing attempts/hour shared across the hosted site. Busy, invalid and storage-blocked requests do not consume that quota; an admitted extraction that the source rejects does. Errors report the actual remaining wait. A separate five-attempt client limit applies only outside Render, where the direct peer can identify a connection.
 - 100MiB conservative delivery allowance per process per UTC day, including previews/ranges. No distributed database or durable quota. All state resets on process restart. Use exactly one Uvicorn worker. Proxy headers remain untrusted; Render's shared connection peer is deliberately not used as a visitor identity.

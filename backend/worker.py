@@ -51,13 +51,20 @@ class PinnedHTTPS(http.client.HTTPSConnection):
             raise
 
 
-def fetch_media(url, target):
-    deadline = time.monotonic() + 35
+def remaining_time(deadline, maximum=10):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise Problem('EXTRACTION_TIMEOUT', 'The media processing deadline was reached.', 504)
+    return min(maximum, remaining)
+
+
+def fetch_media(url, target, *, kind='video', max_bytes=MAX_BYTES, deadline=None):
+    deadline = deadline or time.monotonic() + 35
     for _ in range(4):
         p = validate_media_url(url)
-        conn = PinnedHTTPS(p.hostname, timeout=10, context=ssl.create_default_context())
+        conn = PinnedHTTPS(p.hostname, timeout=remaining_time(deadline), context=ssl.create_default_context())
         try:
-            conn.request('GET', p.path + ('?' + p.query if p.query else ''), headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'video/mp4'})
+            conn.request('GET', p.path + ('?' + p.query if p.query else ''), headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'audio/mp4' if kind == 'audio' else 'video/mp4'})
             response = conn.getresponse()
             if response.status in (301, 302, 303, 307, 308):
                 url = urljoin(url, response.getheader('Location', ''))
@@ -65,16 +72,22 @@ def fetch_media(url, target):
             if response.status != 200:
                 raise Problem('MEDIA_UNAVAILABLE', f'Media delivery returned HTTP {response.status}. The source link may have expired.', 502)
             content_type = response.getheader('Content-Type', '').split(';')[0].strip().lower()
-            if content_type not in ('video/mp4', 'application/octet-stream'):
+            allowed_types = ('audio/mp4', 'audio/x-m4a', 'video/mp4', 'application/octet-stream') if kind == 'audio' else ('video/mp4', 'application/octet-stream')
+            if content_type not in allowed_types:
                 raise Problem('INVALID_MEDIA', 'The source did not return MP4 media bytes.', 502)
             length = response.getheader('Content-Length')
-            if length and (not length.isdigit() or int(length) > MAX_BYTES):
+            if length and (not length.isdigit() or int(length) > max_bytes):
                 raise Problem('MEDIA_TOO_LARGE', 'This prototype supports videos up to 50 MiB.', 413)
             total = 0
             with open(target, 'xb') as out:
-                while chunk := response.read(64 * 1024):
+                while True:
+                    if getattr(conn, 'sock', None) is not None:
+                        conn.sock.settimeout(remaining_time(deadline))
+                    chunk = response.read(64 * 1024)
+                    if not chunk:
+                        break
                     total += len(chunk)
-                    if total > MAX_BYTES:
+                    if total > max_bytes:
                         raise Problem('MEDIA_TOO_LARGE', 'This prototype supports videos up to 50 MiB.', 413)
                     if time.monotonic() > deadline:
                         raise Problem('EXTRACTION_TIMEOUT', 'The media download timed out. Try again later.', 504)
@@ -91,18 +104,55 @@ def fetch_media(url, target):
     raise Problem('UNSAFE_MEDIA', 'Too many media redirects.', 502)
 
 
-def inspect_media(target):
+def inspect_media(target, *, timeout=8):
     try:
-        result = subprocess.run(['ffprobe', '-v', 'error', '-protocol_whitelist', 'file,pipe', '-show_entries', 'stream=codec_type,codec_name,width,height:format=duration,format_name', '-of', 'json', str(target)], capture_output=True, text=True, timeout=8, check=True)
+        result = subprocess.run(['ffprobe', '-v', 'error', '-protocol_whitelist', 'file,pipe', '-show_entries', 'stream=codec_type,codec_name,width,height:format=duration,format_name', '-of', 'json', str(target)], capture_output=True, text=True, timeout=timeout, check=True)
         info = json.loads(result.stdout)
     except FileNotFoundError:
         raise Problem('VERIFIER_UNAVAILABLE', 'FFprobe is required to verify video files on this backend.', 503)
+    except subprocess.TimeoutExpired:
+        raise Problem('EXTRACTION_TIMEOUT', 'Video verification timed out.', 504)
     except (subprocess.SubprocessError, ValueError):
         raise Problem('INVALID_MEDIA', 'The downloaded file failed video-container verification.', 502)
     video = next((s for s in info.get('streams', []) if s.get('codec_type') == 'video'), None)
     if not video or float(info.get('format', {}).get('duration', 0)) <= 0:
         raise Problem('INVALID_MEDIA', 'The file does not contain a playable video stream.', 502)
-    return {'width': video.get('width'), 'height': video.get('height'), 'duration_seconds': float(info['format']['duration']), 'video_codec': video.get('codec_name')}
+    audio = next((s for s in info.get('streams', []) if s.get('codec_type') == 'audio'), None)
+    return {'width': video.get('width'), 'height': video.get('height'), 'duration_seconds': float(info['format']['duration']), 'video_codec': video.get('codec_name'), 'has_audio': audio is not None, 'audio_codec': audio.get('codec_name') if audio else None}
+
+
+def select_formats(info):
+    if info.get('has_drm'):
+        raise Problem('UNSUPPORTED_MEDIA', 'Protected media is unsupported.', 422)
+    formats = [f for f in info.get('formats', []) if f.get('protocol') == 'https' and f.get('url') and not f.get('has_drm')]
+    combined = [f for f in formats if f.get('ext') == 'mp4' and f.get('vcodec') != 'none' and f.get('acodec') != 'none']
+    videos = [f for f in formats if f.get('ext') == 'mp4' and f.get('vcodec') not in ('none', None) and f.get('acodec') == 'none']
+    audios = [f for f in formats if f.get('ext') in ('m4a', 'mp4') and f.get('vcodec') == 'none' and f.get('acodec') not in ('none', None)]
+    if combined:
+        chosen = max(combined, key=lambda f: (f.get('height') or 0, f.get('tbr') or 0))
+    elif videos:
+        # Prefer widely supported AVC; limit split-stream quality to 1080p when offered.
+        candidates = [f for f in videos if 0 < (f.get('height') or 0) <= 1080] or videos
+        chosen = max(candidates, key=lambda f: (str(f.get('vcodec')).startswith(('avc', 'h264')), f.get('height') or 0, f.get('tbr') or 0))
+    else:
+        raise Problem('UNSUPPORTED_MEDIA', 'No supported direct MP4 video was available. Photos, carousel posts, protected media and streaming manifests are unsupported.', 422)
+    audio = max(audios, key=lambda f: f.get('tbr') or 0) if audios else None
+    return chosen, audio
+
+
+def merge_streams(video, audio, target, *, timeout=8):
+    command = ['ffmpeg', '-nostdin', '-hide_banner', '-v', 'error', '-xerror', '-n',
+               '-protocol_whitelist', 'file,pipe', '-i', str(video),
+               '-protocol_whitelist', 'file,pipe', '-i', str(audio),
+               '-map', '0:v:0', '-map', '1:a:0', '-c', 'copy', '-movflags', '+faststart', str(target)]
+    try:
+        subprocess.run(command, capture_output=True, timeout=timeout, check=True)
+    except FileNotFoundError:
+        raise Problem('MERGER_UNAVAILABLE', 'FFmpeg is required to combine this video and audio.', 503)
+    except subprocess.TimeoutExpired:
+        raise Problem('EXTRACTION_TIMEOUT', 'Combining video and audio timed out.', 504)
+    except subprocess.CalledProcessError:
+        raise Problem('MERGE_FAILED', 'The source video and audio could not be combined into a verified MP4.', 502)
 
 
 class QuietLog:
@@ -119,7 +169,8 @@ class QuietLog:
         self.lines.append(str(message)[-1000:])
 
 
-def extract(url, target):
+def extract(url, target, *, deadline=None):
+    deadline = deadline or time.monotonic() + 50
     normalized = normalize_url(url)
     logger = QuietLog()
     options = {'quiet': True, 'no_warnings': True, 'logger': logger, 'skip_download': True,
@@ -139,21 +190,46 @@ def extract(url, target):
         raise Problem('EXTRACTION_FAILED', detail, 502)
     if not info or info.get('_type') in ('playlist', 'multi_video'):
         raise Problem('UNSUPPORTED_MEDIA', 'Only one video per link is supported; carousel posts are unsupported.', 422)
-    formats = [f for f in info.get('formats', []) if f.get('ext') == 'mp4' and f.get('vcodec') != 'none' and f.get('acodec') != 'none' and f.get('protocol') in ('https', 'http') and f.get('url')]
-    if not formats:
-        raise Problem('UNSUPPORTED_MEDIA', 'No single-file MP4 video with audio was available. Photos, split streams and manifests are unsupported.', 422)
-    chosen = max(formats, key=lambda f: (f.get('height') or 0, f.get('tbr') or 0))
+    chosen, audio = select_formats(info)
     if (chosen.get('filesize') or 0) > MAX_BYTES:
         raise Problem('MEDIA_TOO_LARGE', 'This prototype supports videos up to 50 MiB.', 413)
-    size = fetch_media(chosen['url'], target)
-    verified = inspect_media(target)
-    return {'title': str(info.get('title') or 'Instagram video')[:240], 'filename': f"instagram-{normalized.rstrip('/').split('/')[-1]}.mp4", 'size_bytes': size, 'content_type': 'video/mp4', **verified}
+    video_part = target.with_suffix('.video.mp4')
+    audio_part = target.with_suffix('.audio.m4a')
+    combined_streams = False
+    completed = False
+    try:
+        video_size = fetch_media(chosen['url'], video_part, deadline=deadline)
+        verified = inspect_media(video_part, timeout=remaining_time(deadline, 8))
+        if not verified['has_audio'] and audio:
+            audio_budget = MAX_BYTES - video_size - 1024 * 1024
+            if audio_budget <= 0:
+                raise Problem('MEDIA_TOO_LARGE', 'The combined video and audio exceed this prototype’s 50 MiB limit.', 413)
+            fetch_media(audio['url'], audio_part, kind='audio', max_bytes=audio_budget, deadline=deadline)
+            merge_streams(video_part, audio_part, target, timeout=remaining_time(deadline, 8))
+            verified = inspect_media(target, timeout=remaining_time(deadline, 8))
+            if not verified['has_audio']:
+                raise Problem('INVALID_MEDIA', 'The combined file is missing its expected audio stream.', 502)
+            combined_streams = True
+        else:
+            if not verified['has_audio'] and any(f.get('vcodec') == 'none' and f.get('acodec') not in (None, 'none') for f in info.get('formats', [])):
+                raise Problem('UNSUPPORTED_MEDIA', 'The source audio requires an unsupported streaming format. It was not silently removed.', 422)
+            video_part.replace(target)
+        size = target.stat().st_size
+        if not 0 < size <= MAX_BYTES:
+            raise Problem('MEDIA_TOO_LARGE', 'This prototype supports videos up to 50 MiB.', 413)
+        completed = True
+    finally:
+        video_part.unlink(missing_ok=True)
+        audio_part.unlink(missing_ok=True)
+        if not completed:
+            target.unlink(missing_ok=True)
+    return {'title': str(info.get('title') or 'Instagram video')[:240], 'filename': f"instagram-{normalized.rstrip('/').split('/')[-1]}.mp4", 'size_bytes': size, 'content_type': 'video/mp4', 'combined_streams': combined_streams, **verified}
 
 
 def main():
     try:
         request = json.loads(sys.stdin.read(2048))
-        result = extract(request['url'], Path(request['target']))
+        result = extract(request['url'], Path(request['target']), deadline=request.get('deadline'))
         print(json.dumps({'ok': True, 'media': result}))
     except Problem as error:
         print(json.dumps({'ok': False, 'error': {'code': error.code, 'message': error.message}, 'status': error.status}))

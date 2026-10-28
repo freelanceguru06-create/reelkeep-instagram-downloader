@@ -75,7 +75,7 @@ form.addEventListener('submit', async (event) => {
     video.src = mediaUrl(media.preview_url, base);
     filename = /^instagram-[A-Za-z0-9_-]+\.mp4$/.test(media.filename) ? media.filename : 'instagram-video.mp4';
     document.querySelector('#video-title')!.textContent = media.title;
-    document.querySelector('#video-details')!.textContent = `${media.width} × ${media.height} · ${Math.round(media.duration_seconds)} seconds · MP4`;
+    document.querySelector('#video-details')!.textContent = `${media.width} × ${media.height} · ${Math.round(media.duration_seconds)} seconds · MP4${media.has_audio === false ? ' · No audio track provided' : ''}`;
     document.querySelector('#media-size')!.textContent = `${(media.size_bytes / 1024 / 1024).toFixed(1)} MiB`;
     result.hidden = false;
     message('Your video is ready. You can preview it or save the MP4.');

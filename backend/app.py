@@ -9,6 +9,7 @@ import math
 import os
 from pathlib import Path
 import secrets
+import signal
 import shutil
 import sys
 import tempfile
@@ -99,13 +100,31 @@ class State:
 
 
 async def isolated_extract(url, target):
+    process_options = {'start_new_session': True} if os.name == 'posix' else {}
     process = await asyncio.create_subprocess_exec(sys.executable, '-m', 'backend.worker', cwd=ROOT,
-        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, **process_options)
     try:
-        stdout, _ = await asyncio.wait_for(process.communicate(json.dumps({'url': url, 'target': str(target)}).encode()), 55)
+        stdout, _ = await asyncio.wait_for(process.communicate(json.dumps({'url': url, 'target': str(target), 'deadline': time.monotonic() + 50}).encode()), 55)
     except BaseException:
         if process.returncode is None:
-            process.kill()
+            if os.name == 'posix':
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            else:
+                # Include FFmpeg/FFprobe children when cancelling a Windows worker.
+                try:
+                    killer = await asyncio.create_subprocess_exec('taskkill.exe', '/PID', str(process.pid), '/T', '/F', stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+                    await asyncio.wait_for(killer.communicate(), 5)
+                except (OSError, asyncio.TimeoutError):
+                    pass
+                finally:
+                    if process.returncode is None:
+                        try:
+                            process.kill()
+                        except ProcessLookupError:
+                            pass
         await process.communicate()
         raise
     if process.returncode or len(stdout) > 16384:
@@ -205,6 +224,8 @@ def create_app(extractor=isolated_extract, *, client_limit=None):
             raise Problem('EXTRACTION_TIMEOUT', 'Extraction exceeded the 55-second limit. Try again later.', 504)
         finally:
             state.busy = False
+            target.with_suffix('.video.mp4').unlink(missing_ok=True)
+            target.with_suffix('.audio.m4a').unlink(missing_ok=True)
             if token not in state.entries:
                 target.unlink(missing_ok=True)
 

@@ -86,6 +86,8 @@ def test_exact_extraction_errors(code, status):
 def test_timeout_cleanup():
     async def timeout(url, target):
         target.write_bytes(b'partial')
+        target.with_suffix('.video.mp4').write_bytes(b'partial video')
+        target.with_suffix('.audio.m4a').write_bytes(b'partial audio')
         raise asyncio.TimeoutError
     app = create_app(timeout)
     with TestClient(app) as client:
