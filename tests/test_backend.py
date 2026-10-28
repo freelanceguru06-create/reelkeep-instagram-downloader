@@ -38,7 +38,7 @@ def test_allow_cdn():
     assert validate_media_url('https://scontent.cdninstagram.com/video.mp4?key=1').hostname == 'scontent.cdninstagram.com'
 
 
-@pytest.mark.parametrize('address', ['127.0.0.1', '10.0.0.1', '169.254.169.254', '::1', 'fc00::1'])
+@pytest.mark.parametrize('address', ['127.0.0.1', '10.0.0.1', '169.254.169.254', '::1', 'fc00::1', '224.0.0.1', 'ff02::1'])
 def test_dns_private_rejected(monkeypatch, address):
     monkeypatch.setattr(socket, 'getaddrinfo', lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (address, 443))])
     with pytest.raises(Problem):

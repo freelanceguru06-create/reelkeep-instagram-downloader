@@ -32,7 +32,7 @@ Open http://127.0.0.1:4321. The development frontend calls http://127.0.0.1:8000
 ## Deterministic checks
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_backend.py -q
+.\.venv\Scripts\python.exe -m pytest tests/ -q
 pnpm test
 pnpm build
 # Keep pnpm dev running; uses installed Google Chrome, two viewport sizes:

@@ -16,7 +16,9 @@ Use an authorized GitHub account. Source needed by Render: `Dockerfile`, `requir
 6. Record the real `https://…onrender.com` URL. Request `/health` and verify `ok: true`. Request `/openapi.json`; confirm `/api/download` and `/api/media/{token}` exist.
 7. Test one authorized source link from the cloud, then retrieve and inspect actual media. Local results cannot prove cloud-IP access.
 
-Free limits checked 28 October 2026: 750 running hours/workspace/calendar month, idle sleep after 15 minutes, startup about a minute, ephemeral filesystem and no free persistent disk. Hobby includes 5GB outbound bandwidth/month; payment-method accounts may be billed overage, while accounts without one are suspended at exhaustion. Render can suspend unusually high outbound service traffic. Build-minute allowance, available CPU/RAM and eligibility must be confirmed on the actual account. The free Postgres 30-day offer is excluded.
+Free limits checked 28 October 2026: 750 running hours/workspace/calendar month, idle sleep after 15 minutes, startup about a minute, ephemeral filesystem and no free persistent disk. Hobby includes 5GB outbound bandwidth/month; payment-method accounts may be billed overage, while accounts without one are suspended at exhaustion. Render can suspend unusually high outbound service traffic. The account dashboard confirmed 500 included pipeline minutes, a $0 build-spend limit, no card on file, and a selectable Free instance with 0.1 CPU and 512MB RAM. The free Postgres 30-day offer is excluded.
+
+The backend has been deployed at https://reelkeep-instagram-downloader.onrender.com. Two authorized Reel downloads passed cloud verification. Its current CORS allowlist contains `http://127.0.0.1:4321` for the verified local production preview. Add the actual Pages origin before using the hosted frontend. Cloudflare Pages remains undeployed pending account sign-in; the steps below are still required.
 
 ## 3. Cloudflare Pages
 

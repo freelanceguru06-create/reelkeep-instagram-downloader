@@ -21,7 +21,7 @@ MAX_BYTES = 50 * 1024 * 1024
 
 def public_addresses(host):
     addresses = list(dict.fromkeys(row[4][0] for row in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)))
-    if not addresses or any(not ipaddress.ip_address(address).is_global for address in addresses):
+    if not addresses or any(not ipaddress.ip_address(address).is_global or ipaddress.ip_address(address).is_multicast for address in addresses):
         raise Problem('UNSAFE_MEDIA', 'The source returned an unsafe media destination.', 502)
     return addresses
 

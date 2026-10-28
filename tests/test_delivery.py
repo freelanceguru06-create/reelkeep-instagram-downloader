@@ -64,3 +64,28 @@ def test_disk_limit_prevents_extraction():
             app.state.store.entries[name] = Entry(path, {}, time.monotonic() + 100)
         response = client.post('/api/download', json={'url': 'https://instagram.com/reel/ABCDE/'})
         assert response.status_code == 503 and response.json()['error']['code'] == 'STORAGE_FULL'
+
+
+def test_concurrent_requests_do_not_start_two_jobs():
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    entered = threading.Event()
+    release = threading.Event()
+    calls = []
+    async def blocked(url, target):
+        calls.append(url)
+        entered.set()
+        await asyncio.to_thread(release.wait, 3)
+        raise Problem('EXTRACTION_FAILED', 'deterministic fixture', 502)
+    app = create_app(blocked)
+    with TestClient(app) as client, ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(client.post, '/api/download', json={'url': 'https://instagram.com/reel/ABCDE/'})
+        assert entered.wait(2)
+        try:
+            second = client.post('/api/download', json={'url': 'https://instagram.com/reel/FGHIJ/'})
+            assert second.status_code == 503 and second.json()['error']['code'] == 'BUSY'
+        finally:
+            release.set()
+        assert first.result().status_code == 502
+        assert len(calls) == 1

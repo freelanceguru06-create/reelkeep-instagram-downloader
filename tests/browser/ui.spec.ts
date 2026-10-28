@@ -54,3 +54,31 @@ test('privacy and use routes render', async ({page}) => {
     await expect(page.getByRole('heading', {level: 1})).toBeVisible();
   }
 });
+
+test('processing state uses honest progress and disables duplicate submissions', async ({page}) => {
+  let finish!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  await page.route('**/api/download', async route => {
+    await gate;
+    await route.fulfill({status:504,contentType:'application/json',body:JSON.stringify({ok:false,error:{code:'EXTRACTION_TIMEOUT',message:'Deterministic timeout fixture'}})});
+  });
+  await page.goto('/');
+  await page.getByLabel('PASTE YOUR INSTAGRAM LINK').fill('https://www.instagram.com/reel/DfAKyqSzu1X/');
+  await page.getByRole('button',{name:'Find my video'}).click();
+  await expect(page.getByRole('button',{name:'Checking & preparing…'})).toBeDisabled();
+  await expect(page.getByLabel('PASTE YOUR INSTAGRAM LINK')).toBeDisabled();
+  await expect(page.getByRole('status')).toContainText('Checking public access');
+  expect(await page.getByRole('status').textContent()).not.toMatch(/\d+%/);
+  finish();
+  await expect(page.getByRole('status')).toContainText('Deterministic timeout fixture');
+  await expect(page.getByRole('button',{name:'Find my video'})).toBeEnabled();
+});
+
+test('Paste uses clipboard permission fallback without submitting a request', async ({page}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', {value: {readText: async () => { throw new Error('permission denied fixture'); }}});
+  });
+  await page.goto('/');
+  await page.getByRole('button',{name:'Paste',exact:true}).click();
+  await expect(page.getByRole('status')).toContainText('Clipboard access is unavailable');
+});
