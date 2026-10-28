@@ -2,7 +2,7 @@
 
 Lightweight Instagram public Reel/video-post downloader experiment. Astro static frontend; FastAPI backend; yt-dlp anonymous metadata extraction; bounded HTTPS CDN download; FFprobe verification; temporary files. No paid API, passwords, cookies, private-account support, proxy rotation or access-control bypass.
 
-Local downloads were verified for three authorized Reels on 28 October 2026. **Cloud deployment and cloud-IP extraction require separate verification.** See the local verification report if included with your copy; do not infer live availability from a build or a successful local test.
+Local downloads were verified for three authorized Reels on 28 October 2026. Two representative Reels also downloaded and passed FFprobe inspection through the deployed Render Free backend at https://reelkeep-instagram-downloader.onrender.com. **The Cloudflare Pages frontend still requires account sign-in and deployment.** See the local verification report if included with your copy; local browser results do not establish pages.dev end-to-end success.
 
 ## Requirements
 

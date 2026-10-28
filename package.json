@@ -11,7 +11,8 @@
     "build": "astro check && astro build && node scripts/finalize.mjs",
     "preview": "astro preview --host 127.0.0.1",
     "test": "node --test tests/frontend.test.mjs",
-    "test:browser": "playwright test",
+    "test:browser": "playwright test tests/browser/ui.spec.ts",
+    "test:live-browser": "playwright test tests/browser/live.spec.ts --project desktop-chrome",
     "cf:whoami": "wrangler whoami",
     "deploy:pages": "wrangler pages deploy dist --project-name reelkeep --branch main"
   },

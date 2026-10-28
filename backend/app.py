@@ -135,10 +135,14 @@ def create_app(extractor=isolated_extract):
         if request.headers.get('content-type', '').split(';')[0] != 'application/json':
             raise Problem('INVALID_CONTENT_TYPE', 'Send a JSON request body.', 415)
         body = bytearray()
-        async for chunk in request.stream():
-            body.extend(chunk)
-            if len(body) > 2048:
-                raise Problem('REQUEST_TOO_LARGE', 'The request body exceeds 2 KiB.', 413)
+        try:
+            async with asyncio.timeout(5):
+                async for chunk in request.stream():
+                    body.extend(chunk)
+                    if len(body) > 2048:
+                        raise Problem('REQUEST_TOO_LARGE', 'The request body exceeds 2 KiB.', 413)
+        except TimeoutError:
+            raise Problem('REQUEST_TIMEOUT', 'The request body was not received within five seconds.', 408)
         try:
             payload = json.loads(body)
         except (ValueError, UnicodeError):

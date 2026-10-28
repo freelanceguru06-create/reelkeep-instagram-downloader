@@ -93,7 +93,7 @@ def fetch_media(url, target):
 
 def inspect_media(target):
     try:
-        result = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'stream=codec_type,codec_name,width,height:format=duration,format_name', '-of', 'json', str(target)], capture_output=True, text=True, timeout=8, check=True)
+        result = subprocess.run(['ffprobe', '-v', 'error', '-protocol_whitelist', 'file,pipe', '-show_entries', 'stream=codec_type,codec_name,width,height:format=duration,format_name', '-of', 'json', str(target)], capture_output=True, text=True, timeout=8, check=True)
         info = json.loads(result.stdout)
     except FileNotFoundError:
         raise Problem('VERIFIER_UNAVAILABLE', 'FFprobe is required to verify video files on this backend.', 503)
